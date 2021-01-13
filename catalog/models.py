@@ -1,11 +1,21 @@
 from django.db import models
 from django.urls import reverse # Used to generate URLs by reversing the URL patterns
 import uuid # Required for unique book instances
+from django.contrib.auth.models import User
+from datetime import date
 
 # Create your models here.
 class Genre(models.Model):
     """Model representing a book genre."""
     name = models.CharField(max_length=200, help_text='Enter a book genre (e.g. Science Fiction)')
+
+    def __str__(self):
+        """String for representing the Model object."""
+        return self.name
+
+class Language(models.Model):
+    """Model representing a book language."""
+    name = models.CharField(max_length=200, help_text='Enter a book language (e.g. Spanish)')
 
     def __str__(self):
         """String for representing the Model object."""
@@ -26,6 +36,7 @@ class Book(models.Model):
     # ManyToManyField used because genre can contain many books. Books can cover many genres.
     # Genre class has already been defined so we can specify the object above.
     genre = models.ManyToManyField(Genre, help_text='Select a genre for this book')
+    language = models.ManyToManyField(Language, help_text='Select a language for this book')
 
     def __str__(self):
         """String for representing the Model object."""
@@ -41,12 +52,19 @@ class Book(models.Model):
 
     display_genre.short_description = 'Genre'
 
+    def display_language(self):
+        """Create a string for the Language. This is required to display language in Admin."""
+        return ', '.join(language.name for language in self.language.all()[:3])
+
+    display_language.short_description = 'Language'
+
 class BookInstance(models.Model):
     """Model representing a specific copy of a book (i.e. that can be borrowed from the library)."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, help_text='Unique ID for this particular book across whole library')
     book = models.ForeignKey('Book', on_delete=models.SET_NULL, null=True)
     imprint = models.CharField(max_length=200)
     due_back = models.DateField(null=True, blank=True)
+    borrower = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
     LOAN_STATUS = (
         ('m', 'Maintenance'),
@@ -65,10 +83,16 @@ class BookInstance(models.Model):
 
     class Meta:
         ordering = ['due_back']
+        permissions = (("can_mark_returned", "Set book as returned"),)
 
     def __str__(self):
         """String for representing the Model object."""
         return f'{self.id} ({self.book.title})'
+
+    def is_overdue(self):
+        if self.due_back and date.today() > self.due_back:
+            return True
+        return False
 
 class Author(models.Model):
     """Model representing an author."""
